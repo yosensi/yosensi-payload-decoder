@@ -8,7 +8,7 @@
  * Compatibility with ECMAScript 5 and later versions of the standard
  *
  * @author      Pawel Poplawski <pawel.poplawski@yosensi.io>
- * @version     1.0.0
+ * @version     1.0.1
  * @copyright   YOSENSI SP. Z O.O. | http://yosensi.io
  * @license     Modified-BSD-License, see LICENSE file include in the project
  *
@@ -301,7 +301,8 @@ function payloadV2Parse(bytes, date, utils) {
         34: ["PM4", "pug/m3]"],
         35: ["PM10", "pug/m3]"],
         36: ["generic modbus", ""],
-        37: ["O2", "[%]"]
+        37: ["O2", "[%]"],
+        38: ["Energy consumption", "[kWh]"]
     });
     /**
      * Two-value custom types
