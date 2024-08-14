@@ -302,7 +302,9 @@ function payloadV2Parse(bytes, date, utils) {
         35: ["PM10", "pug/m3]"],
         36: ["generic modbus", ""],
         37: ["O2", "[%]"],
-        38: ["Energy consumption", "[kWh]"]
+        38: ["Energy consumption", "[kWh]"],
+        39: ["OBIS", ""],
+        63: ["Command", ""]
     });
     /**
      * Two-value custom types
