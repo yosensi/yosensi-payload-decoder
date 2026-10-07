@@ -4,14 +4,28 @@
  *  \  / _ \(_-</ -_) _ \(_-</ /
  *  /_/\___/___/\__/_//_/___/_/
  *
- * Yosensi JS payload decoder compatible with TTN v3 payload formatter and ChirpStact payload codec
+ * Yosensi JS payload decoder compatible with TTN v3 payload formatter and ChirpStack payload codec
  * Compatibility with ECMAScript 5 and later versions of the standard
  *
  * @author      Pawel Poplawski <pawel.poplawski@yosensi.io>
- * @version     1.0.2
+ * @version     1.0.3
  * @copyright   YOSENSI SP. Z O.O. | http://yosensi.io
  * @license     Modified-BSD-License, see LICENSE file include in the project
  *
+ * @since 1.0.3
+ *
+ * Version with V1 payload decoding functionality with output compatible with TTN v3 payload formatter and ChirpStack payload codec.
+ * In addition, a function for testing V1 payloads.
+ * Added new measurement type (49). Update of example payload for new devices.
+ * 
+ * @since 1.0.2
+ * 
+ * Added new measurement types (39 to 48). Update of example payloads for new devices.
+ * 
+ * @since 1.0.1
+ * 
+ * Added energy consumption measurement type.
+ * 
  * @since 1.0.0
  *
  * Version with V2 payload decoding functionality with output compatible with TTN v3 payload formatter and ChirpStact payload codec.
@@ -49,11 +63,21 @@
  *    YO_ParticulateMatter_1: "02:02:00:00:08:00:01:1c:6e:0d:00:01:00:f0:10:00:00:24:41:00:05:ff:f7:00:21:00:00",
  *    YO_ParticulateMatter_2: "02:03:00:79:25:00:11:01:00:68:25:00:11:02:00:6f:25:00:11:03:00:70:25:00:11:04:00:70:24:00:11:11:00:53:24:00:11:12:00:53",
  *    YO_Atmos: "02:92:00:00:08:00:01:2a:eb:0d:00:01:00:ee:10:00:00:24:15:00:01:27:1f",
- *    YO_AgriPro: "02:16:00:00:08:00:01:29:ac:0d:00:01:00:ec:10:00:00:23:66:00:11:00:00:09:66:00:11:01:00:0b:0d:00:11:00:00:eb:0d:00:11:01:00:e8"
+ *    YO_AgriPro: "02:16:00:00:08:00:01:29:ac:0d:00:01:00:ec:10:00:00:23:66:00:11:00:00:09:66:00:11:01:00:0b:0d:00:11:00:00:eb:0d:00:11:01:00:e8",
+ *    YO_AirPressureMonitor: "02:20:00:00:08:00:01:1c:a0:0d:00:01:00:ef:10:00:00:30:15:00:01:00:8e:0d:00:11:28:00:e1:a2:00:01:01:a2"
  * });
  *
  * // Function call for testing V2 payloads for use outside TTN and ChirpStack formatters
  * testPayloadV2Decoder(SAMPLE_V2_PAYLOADS.YO_360);
+ * 
+ * // Example payloads for testing the V1 protocol
+ * var SAMPLE_V1_PAYLOADS = Object.freeze({
+ *    RTC_disabled: "01:00:4c:4e:50:43:01:02:01",
+ *    RTC_enabled: "01:00:4c:4e:41:54:01:00:01:00:09:55:23"
+ *    
+ * });
+ * // Function call for testing V1 payloads for use outside TTN and ChirpStack formatters
+ * testPayloadV1Decoder(SAMPLE_V1_PAYLOADS.RTC_disabled);
  *
  */
 
@@ -83,7 +107,10 @@ function decodeUplink(input) {
      */
     var utils = utilityFunctions();
 
-    if (protocolVersion == supportedPayloadVersions().V2) {
+    if (protocolVersion == supportedPayloadVersions().V1) {
+        decoded = payloadV1Parse(bytes, new Date(), utils);
+    }
+    else if (protocolVersion == supportedPayloadVersions().V2) {
         decoded = payloadV2Parse(bytes, new Date(), utils);
     }
     else {
@@ -118,7 +145,10 @@ function Decode(port, bytes) {
      */
     var utils = utilityFunctions();
 
-    if (protocolVersion == supportedPayloadVersions().V2) {
+    if (protocolVersion == supportedPayloadVersions().V1) {
+        decoded = payloadV1Parse(bytes, new Date(), utils);
+    }
+    else if (protocolVersion == supportedPayloadVersions().V2) {
         decoded = payloadV2Parse(bytes, new Date(), utils);
     }
     else {
@@ -139,6 +169,7 @@ function Decode(port, bytes) {
  */
 function supportedPayloadVersions() {
     var PAYLOAD_VER = Object.freeze({
+        V1: 1,
         V2: 2
     });
     return PAYLOAD_VER;
@@ -150,6 +181,32 @@ function supportedPayloadVersions() {
  * @param {string, object} data Example payload according to V2 protocol
  */
 function testPayloadV2Decoder(data) {
+    var input = {
+        fPort: 0,
+        bytes: []
+    };
+    var decoded;
+    if (typeof (data) === "string") {
+        var strArr = data.split(/[:;.,|-]+/);
+        strArr.forEach(function (item) { input.bytes.push(parseInt(item, 16)) });
+        decoded = decodeUplink(input);
+        console.log(require('util').inspect(decoded, { showHidden: false, depth: null, colors: false }));
+    }
+    else if (typeof (data) === "object") {
+        if (Array.isArray(data)) {
+            input.bytes = data;
+            decoded = decodeUplink(input);
+            console.log(require('util').inspect(decoded, { showHidden: false, depth: null, colors: false }));
+        }
+    }
+}
+
+/**
+ * Test function for V1 payloads
+ *
+ * @param {string, object} data Example payload according to V1 protocol
+ */
+function testPayloadV1Decoder(data) {
     var input = {
         fPort: 0,
         bytes: []
@@ -194,6 +251,47 @@ function payload(data, warnings, errors) {
         errors: errors
     };
     return payload;
+}
+
+/**
+ * Payload V1
+ *
+ * @param {number} payloadHeader Payload header
+ * @param {string} dateTime Time of payload creation
+ * @param {string} devName Device name
+ * @param {string} fwVersion Firmware version
+ * @param {string} timeDateSetting Device date and time setup
+ * @returns Object with all payload V1 data
+ */
+function payloadV1(payloadHeader, dateTime, devName, fwVersion, timeDateSetting) {
+    var data = {
+        /**
+         * Payload version
+         */
+        payloadVersion: 1,
+        /**
+         * Payload counter
+         */
+        payloadType: payloadHeader,
+        /**
+         * Time of payload creation
+         */
+        payloadDateTime: dateTime,
+        /**
+         * Device name
+         */
+        deviceName: devName,
+        /**
+         * Device firmware version
+         */
+        firmwareVersion: fwVersion,
+        /**
+         * Device Time and Date setting
+         */
+        devTimeDate: timeDateSetting,
+
+    };
+    return data;
 }
 
 /**
@@ -271,6 +369,140 @@ function payloadV2Measurement(address, dateTime, type, typeName, typeUnits, valu
 }
 
 /**
+ * Payload V1 parser function
+ *
+ * @param {object} bytes Bytes of received payload
+ * @param {object} date Payload reception date and time (current date and time by default)
+ * @param {object} utils Utility functions
+ * @returns Decoded payload and/or error array, if any, compatible with TTN v3 payload formatter
+ *
+ */
+function payloadV1Parse(bytes, date, utils) {
+    var DOWNLINK_V1_HDR_LEN = 2;
+    var V1_PAYLOAD_ID00_INFO_TIME_LEN = 13;
+
+    var PAYLOAD_V1_PROTOCOL_ID = Object.freeze({
+        0: ["Device time, date and general information"]
+    });
+
+    /**
+     * Payload V1 measurement types and units
+     */
+    var PAYLOAD_V1_DEV_SHORT_NAME = Object.freeze({
+        LNPC: ["YO 360"],
+        LNPT: ["YO Pressure Transuder"],
+        LNDI: ["YO Pulse"],
+        LNFD: ["YO H2O"],
+        LNPP: ["YO Pure Pro"],
+        LNTP: ["YO Temp"],
+        LNPW: ["YO Power"],
+        LNAA: ["YO Animal Tracker"],
+        LNAP: ["YO Airflow Pro"],
+        LNDN: ["YO Distance"],
+        LNAN: ["YO Analog"],
+        LNAG: ["YO AgriBox"],
+        LNMP: ["YO Meter Pulse"],
+        LNRS: ["YO Modbus"],
+        LNFM: ["YO Refrigerant Monitor"],
+        LNRP: ["YO People Counter"],
+        LNDA: ["YO Airflow Pro Dual"],
+        LNRS: ["YO Relay Switch"],
+        LNAB: ["YO Ambience"],
+        LNMR: ["YO Meter Reader 2.0"],
+        LNVM: ["YO Vibration Monitor"],
+        LNTS: ["YO Thermostat"],
+        LNPM: ["YO Particulate Matter Sensor"],
+        LNAT: ["YO Atmos"],
+        LNAO: ["YO Agri Pro"]
+    });
+
+
+    if (!checkInputDataType(bytes)) return raiseError("Incorrect input data type. Payload should only consist of numeric values");
+
+    try {
+        return parse(bytes, date);
+    }
+    catch (err) {
+        return raiseError("Input data parse failed. ".concat(err));
+    }
+
+    function parse(bytes, date) {
+        var devName;
+        var fwVer;
+        var infoTime;
+        if (bytes.length < DOWNLINK_V1_HDR_LEN) return raiseError("Payload length must be at least 2 but was: ".concat(bytes.length));
+        if (bytes.length > 49) return raiseError("Payload length too long: ".concat(bytes.length));
+
+        var dateTime = new Date(Number(date));
+
+        devName = getDeviceNameFromBytes(bytes);
+        fwVer = getDeviceFwVerFromBytes(bytes);
+
+        if (bytes.length == V1_PAYLOAD_ID00_INFO_TIME_LEN){
+            infoTime = extractDeviceTime(bytes);
+            return payload(payloadV1(extractPayloadHeader(bytes), dateTime.toISOString(), devName, fwVer, infoTime.toISOString()), [], []);
+        } else {
+            return payload(payloadV1(extractPayloadHeader(bytes), dateTime.toISOString(), devName, fwVer), [], []);
+        }
+    }
+
+    function getDeviceNameFromBytes(bytes) {
+        if (bytes.length < 5) return null;
+
+        var shortName = "";
+        for (var i = 2; i <= 5; i++) {
+            shortName += String.fromCharCode(bytes[i]);
+        }
+
+        if (PAYLOAD_V1_DEV_SHORT_NAME.hasOwnProperty(shortName)) {
+            return PAYLOAD_V1_DEV_SHORT_NAME[shortName][0];
+        }
+
+        return null;
+    }
+
+    function getDeviceFwVerFromBytes(bytes) {
+        if (bytes.length < 9) return null;
+        var fwVer = "";
+        fwVer = bytes[6] + "." + bytes[7] + "." + bytes[8];
+        return fwVer;
+    }
+
+    function checkInputDataType(bytes) {
+        if (typeof (bytes) === "object") {
+            for (var i = 0; i < bytes.length; i++) {
+                if (typeof (bytes[i]) !== "number") {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    function extractPayloadHeader(bytes) {
+        if (PAYLOAD_V1_PROTOCOL_ID.hasOwnProperty(utils.unsignedNbrFromByte(bytes[1]))) {
+            return PAYLOAD_V1_PROTOCOL_ID[utils.unsignedNbrFromByte(bytes[1])][0];
+        }
+        return null;
+    }
+
+    function extractDeviceTime(bytes) {
+        var value = 0;
+        var count = 4;
+        for (var i = 9; i < 13; i++) {
+            value |= (bytes[i] & 0xFF) << (8 * --count);
+        }
+        var date = new Date(value * 1000);
+        return date;
+    }
+
+    function raiseError(message) {
+        return payload({}, [], [message]);
+    }
+}
+
+/**
  * Payload V2 parser function
  *
  * @param {object} bytes Bytes of received payload
@@ -330,6 +562,7 @@ function payloadV2Parse(bytes, date, utils) {
         46: ["Modbus write single holding register", ""],
         47: ["Modbus write multiple coils", ""],
         48: ["Modbus write multiple holding registers", ""],
+        49: ["Irradiance", "W/m2"],
         62: ["RSSI", "dBm"],
         63: ["Command", ""]
     });
